@@ -67,39 +67,58 @@ protected:
     /***************************************************/
     Vector retrieveTarget3D(const Vector &cogL, const Vector &cogR)
     {
-        // FILL IN THE CODE
-        return Vector(3);
+        Vector x;
+        igaze->triangulate3DPoint(cogL,cogR,x);
+        return x;
     }
 
     /***************************************************/
     void fixate(const Vector &x)
     {
-        // FILL IN THE CODE
+        igaze->lookAtFixationPoint(x);
+        igaze->waitMotionDone();
     }
 
     /***************************************************/
     Vector computeHandOrientation()
     {
-        // FILL IN THE CODE
-        return Vector(4);
+        Matrix Rot(3,3);
+        Rot(0,0)=-1.0; Rot(0,1)= 0.0; Rot(0,2)= 0.0;
+        Rot(1,0)= 0.0; Rot(1,1)= 0.0; Rot(1,2)=-1.0;
+        Rot(2,0)= 0.0; Rot(2,1)=-1.0; Rot(2,2)= 0.0;
+        return dcm2axis(Rot);
     }
 
     /***************************************************/
     void approachTargetWithHand(const Vector &x, const Vector &o)
     {
-        // FILL IN THE CODE
+        Vector dof(10,1.0),dummy;
+        iarm->setDOF(dof,dummy);
+    
+        Vector approach=x;
+        approach[1]+=0.1; // 10 cm
+        iarm->goToPoseSync(approach,o);
+        iarm->waitMotionDone();
     }
 
     /***************************************************/
     void roll(const Vector &x, const Vector &o)
     {
-        // FILL IN THE CODE
+        iarm->setTrajTime(0.4);
+
+        Vector target=x;
+        target[1]-=0.1; // -10 cm
+        iarm->goToPoseSync(target,o);
+        iarm->waitMotionDone();
     }
 
     /***************************************************/
     void look_down()
     {
-        // FILL IN THE CODE
+        Vector ang(3,0.0);
+        ang[1]=-40.0;   // elevation [deg]
+        igaze->lookAtAbsAngles(ang);
+        igaze->waitMotionDone();
     }
 
     /***************************************************/
@@ -126,7 +145,12 @@ protected:
     /***************************************************/
     void home()
     {
-        // FILL IN THE CODE
+        Vector xd(3);
+        xd[0]=-0.3; 
+        xd[1]=+0.2;
+        xd[2]=0.0;
+        iarm->goToPositionSync(xd);
+        iarm->waitMotionDone();
     }
 
 public:
@@ -160,7 +184,20 @@ public:
             return false;
         }
 
-        // FILL IN THE CODE
+        Property optGaze;
+        optGaze.put("device","gazecontrollerclient");
+        optGaze.put("remote","/iKinGazeCtrl");
+        optGaze.put("local","/gaze_client");
+
+        if (!drvGaze.open(optGaze))
+        {
+            yError()<<"Unable to open the Gaze Controller";
+            drvArm.close();
+            return false;
+        }
+
+        drvArm.view(iarm);
+        drvGaze.view(igaze);
 
         imgLPortIn.open("/imgL:i");
         imgRPortIn.open("/imgR:i");
@@ -217,8 +254,11 @@ public:
         }
         else if (cmd=="make_it_roll")
         {
-            // FILL IN THE CODE
-            bool go=false;   // you need to properly handle this flag
+            mutex.lock();
+            bool go = okL && okR;
+            Vector cogL = this->cogL;
+            Vector cogR = this->cogR;
+            mutex.unlock();
 
             if (go)
             {
